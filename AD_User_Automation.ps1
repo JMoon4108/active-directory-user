@@ -18,7 +18,7 @@ Function Set-random-password() {
 
 }
 
-#Lets user choose the OU 
+#OU selection using GUI 
 Function Get-ou-path {
     $ouList = Get-ADOrganizationalUnit -Filter *
 
@@ -29,20 +29,72 @@ Function Get-ou-path {
     }
     return $selectedOU.DistinguishedName
 }
+#validate name entry
+Function Get-valid-name {
+    param(
+        [string]$namePrompt = ""
+    )
+    do{
+        $isValid = $false
+        try{
+            $userInput = Read-Host $namePrompt
+
+            if ([string]::IsNullOrWhiteSpace($userInput)){
+                throw "Please enter a name."
+            }
+
+            if ($userInput -notmatch '^[a-zA-z-]+$'){
+                throw "Please enter a name with only numbers or hyphens."
+            }
+            $isValid = $true
+        }
+        catch{
+            Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    } until ($isValid)
+    return $userInput
+}
+#validate username entry
+Function Get-valid-username {
+    do{
+        $isValid = $false
+        try{
+            $username = Read-Host -Prompt "Enter Username"
+
+            if ([string]::IsNullOrWhiteSpace($username)){
+                throw "Please enter a username."
+            }
+
+            if ($username -notmatch '^[a-zA-Z0-9-.]+$'){
+                throw "Please use valid characters: (A-Z), (a-z), (0-9), '-', '.'"
+            }
+
+            if ($username[-1] -match '\.$'){
+                throw "Please enter a username that doesn't end with a period."
+            }
+
+            $isValid = $true
+        }
+        catch{
+            Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    } until ($isValid)
+    return $username
+}
 
 #collect new user information
-$firstName = Read-Host -Prompt "Enter first name"
-$lastName = Read-Host -Prompt "Enter last name"
-$username = Read-Host -Prompt "Enter Username"
+$firstName = Get-valid-name "Enter first name"
+$lastName = Get-valid-name "Enter last name"
+$username = Get-valid-username
 $ouPath = Get-ou-path
 
-#group selection
+#group selection using GUI
 $selectedGroup = $(Get-ADGroup -Filter * | Sort-Object Name) | Out-GridView -Title "Please select a group for permissions" -OutputMode Single
 
 $newPassword = Set-random-password
 $securePassword = ConvertTo-SecureString $newPassword -AsPlainText -Force
 
-#Return password and username to command prompt, to provide to user
+#return password and username to command prompt, to provide to user
 Write-Host "Creating User: $($username)" -BackgroundColor Black -ForegroundColor Cyan
 Write-Host "With password: $newPassword" -BackgroundColor Black -ForegroundColor Cyan
 
@@ -60,10 +112,9 @@ New-AdUser  -AccountPassword $SecurePassword `
             -Path "$ouPath" 
 
 
-#prompt for password change on first login (Allows for RDP login for first time)
+#prompt for password change on first login (allows for RDP login for first time)
 Set-ADUser -Identity $username -Replace @{pwdLastSet=0}
 
-#assign group
+#assign group and permissions
 Add-ADGroupMember -Identity "$selectedGroup" -Members "$username"
 
-Get-ADUser 
